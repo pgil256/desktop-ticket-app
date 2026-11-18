@@ -8,8 +8,7 @@ class ReportIssueWindow(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.username = ""
-        self.password = ""
+        self.sharepoint = None
         self.item_id = ""
         self.init_ui()
 
@@ -56,9 +55,8 @@ class ReportIssueWindow(QWidget):
 
         self.setLayout(layout)
 
-    def set_credentials(self, username, password):
-        self.username = username
-        self.password = password
+    def set_sharepoint(self, sharepoint):
+        self.sharepoint = sharepoint
 
     def set_item_id(self, item_id):
         self.item_id = item_id
@@ -67,11 +65,11 @@ class ReportIssueWindow(QWidget):
 
     def prefill_title(self):
         try:
-            item = get_sharepoint_item(self.username, self.password, "Inventory", self.item_id)
+            item = get_sharepoint_item(self.sharepoint, "Inventory", self.item_id)
             item_name = item.get('Item', '')
             self.title_input.setText(f"Issue with {item_name}")
         except Exception as e:
-            print(f"Error prefilling title: {str(e)}")
+            print("The issue title could not be prefilled.")
 
     def reset_fields(self):
         self.title_input.clear()
@@ -89,11 +87,10 @@ class ReportIssueWindow(QWidget):
             return
 
         try:
-            user_id = get_user_id(self.username, self.password, self.username)
+            user_id = get_user_id(self.sharepoint)
 
             add_issue_to_sharepoint(
-                self.username, 
-                self.password, 
+                self.sharepoint, 
                 "Tickets", 
                 title, 
                 description, 
@@ -107,7 +104,7 @@ class ReportIssueWindow(QWidget):
             self.reset_fields()
             self.go_back()
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"An error occurred: {str(e)}")
+            QMessageBox.warning(self, "Error", "The issue could not be submitted to SharePoint.")
 
     def go_back(self):
         main_window = self.window()

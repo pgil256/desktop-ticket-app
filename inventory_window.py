@@ -7,15 +7,13 @@ from PyQt6.QtGui import QColor, QPalette, QFont
 from sharepoint_utils import get_sharepoint_list_items
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
 
 class InventoryWindow(QWidget):
     item_selected = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.username = ""
-        self.password = ""
+        self.sharepoint = None
         self.current_page = 1
         self.total_pages = 1
         self.current_field = None
@@ -72,16 +70,15 @@ class InventoryWindow(QWidget):
 
         self.setLayout(layout)
 
-    def set_credentials(self, username, password):
-        self.username = username
-        self.password = password
+    def set_sharepoint(self, sharepoint):
+        self.sharepoint = sharepoint
         self.load_items()
 
     def load_items(self, page=1, field=None, value=None):
         items, has_next, page_number, total_pages = get_sharepoint_list_items(
-            self.username, self.password, "Inventory", page_size=100, page_number=page, field=field, value=value
+            self.sharepoint, "Inventory", page_size=100, page_number=page, field=field, value=value
         )
-        logging.debug(f"Loaded items: {items}")
+        logging.debug("Loaded %d inventory items", len(items))
         self.populate_table(items)
         self.current_page = page_number
         self.total_pages = total_pages
@@ -96,7 +93,7 @@ class InventoryWindow(QWidget):
             if 'ID' in item:
                 edit_button.clicked.connect(lambda _, item_id=item['ID']: self.edit_item(item_id))
             else:
-                logging.error(f"Item does not have 'ID' key: {item}")
+                logging.warning("Skipping an inventory item without an ID")
                 continue
             self.table.setCellWidget(row, 0, edit_button)
             for col, key in enumerate(['Item', 'Description', 'S/N', 'Location', 'Condition', 'Assigned To', 'Date', 'Cost', 'Funding'], start=1):

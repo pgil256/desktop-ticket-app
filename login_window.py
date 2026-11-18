@@ -1,11 +1,11 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QColor, QPalette, QFont
 
-from sharepoint_utils import test_sharepoint_connection
+from sharepoint_utils import connect_sharepoint
 
 class LoginWindow(QWidget):
-    login_successful = pyqtSignal(str, str)
+    login_successful = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -26,32 +26,23 @@ class LoginWindow(QWidget):
 
         layout = QVBoxLayout()
 
-        self.username_label = QLabel("Username:")
-        self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText("Enter your username")
-        layout.addWidget(self.username_label)
-        layout.addWidget(self.username_input)
+        prompt = QLabel("Sign in with your work account in the Microsoft browser window.")
+        prompt.setWordWrap(True)
+        layout.addWidget(prompt)
 
-        self.password_label = QLabel("Password:")
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_input.setPlaceholderText("Enter your password")
-        layout.addWidget(self.password_label)
-        layout.addWidget(self.password_input)
-
-        self.login_button = QPushButton("Login")
+        self.login_button = QPushButton("Sign in with Microsoft")
         self.login_button.clicked.connect(self.login)
         layout.addWidget(self.login_button)
 
         self.setLayout(layout)
 
     def login(self):
-        username = self.username_input.text()
-        password = self.password_input.text()
+        self.login_button.setEnabled(False)
         try:
-            test_sharepoint_connection(username, password)
-            self.login_successful.emit(username, password)
-        except ValueError as e:
-            QMessageBox.warning(self, "Login Error", str(e))
-        except Exception as e:
-            QMessageBox.critical(self, "Unexpected Error", f"An unexpected error occurred: {str(e)}")
+            sharepoint = connect_sharepoint()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Sign-in error", str(exc))
+        else:
+            self.login_successful.emit(sharepoint)
+        finally:
+            self.login_button.setEnabled(True)
