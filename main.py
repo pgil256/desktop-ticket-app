@@ -60,18 +60,17 @@ class MainWindow(QMainWindow):
         self.inventory_window.child_widget.item_selected.connect(self.show_item_dashboard_with_item)
         self.item_dashboard_window.child_widget.report_issue_requested.connect(self.show_report_issue)
 
-    def on_login_successful(self, username, password):
-        self.username = username
-        self.password = password
-        self.item_dashboard_window.child_widget.set_credentials(username, password)
-        self.report_issue_window.child_widget.set_credentials(username, password)
+    def on_login_successful(self, sharepoint):
+        self.sharepoint = sharepoint
+        self.item_dashboard_window.child_widget.set_sharepoint(sharepoint)
+        self.report_issue_window.child_widget.set_sharepoint(sharepoint)
         self.show_home()
 
     def show_home(self):
         self.central_widget.setCurrentWidget(self.home_window)
 
     def show_inventory(self):
-        self.inventory_window.child_widget.set_credentials(self.username, self.password)
+        self.inventory_window.child_widget.set_sharepoint(self.sharepoint)
         self.central_widget.setCurrentWidget(self.inventory_window)
 
     def show_submit_ticket(self):
@@ -87,7 +86,7 @@ class MainWindow(QMainWindow):
         self.central_widget.setCurrentWidget(self.item_dashboard_window)
 
     def show_report_issue(self, item_id):
-        self.report_issue_window.child_widget.set_credentials(self.username, self.password)
+        self.report_issue_window.child_widget.set_sharepoint(self.sharepoint)
         self.report_issue_window.child_widget.set_item_id(item_id)
         self.central_widget.setCurrentWidget(self.report_issue_window)
 

@@ -1,41 +1,44 @@
 import logging
-from office365.runtime.auth.user_credential import UserCredential
+import os
+from urllib.parse import urlsplit
 from office365.sharepoint.client_context import ClientContext
 from office365.runtime.client_request_exception import ClientRequestException
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # SharePoint configuration
-site_url = 'https://academiedavinci.sharepoint.com/sites/ADVTechHelp'
 inventory_list_name = 'Inventory'
 
-def test_sharepoint_connection(username, password):
+class SharePointConfigurationError(ValueError):
+    """The app has no usable SharePoint site configured."""
+
+
+def connect_sharepoint():
+    site = os.environ.get("SHAREPOINT_SITE_URL", "").strip()
+    tenant = os.environ.get("SHAREPOINT_TENANT_ID", "").strip()
+    client_id = os.environ.get("SHAREPOINT_CLIENT_ID", "").strip()
+    parsed = urlsplit(site)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise SharePointConfigurationError("Set SHAREPOINT_SITE_URL to your organization's HTTPS SharePoint site.")
+    if not tenant or not client_id:
+        raise SharePointConfigurationError("Set SHAREPOINT_TENANT_ID and SHAREPOINT_CLIENT_ID for the registered desktop app.")
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
+        ctx = ClientContext(site).with_interactive(tenant, client_id)
         web = ctx.web
         ctx.load(web)
         ctx.execute_query()
-        return True
-    except ClientRequestException as e:
-        logger.error(f"ClientRequestException: {str(e)}")
-        if isinstance(e.response, HttpResponse):
-            logger.error(f"Response status code: {e.response.status_code}")
-            logger.error(f"Response content: {e.response.content}")
-        if "AADSTS50126" in str(e):
-            raise ValueError("Invalid username or password. Please check your credentials and try again.")
-        else:
-            raise ValueError(f"An error occurred while connecting to SharePoint: {str(e)}")
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        raise ValueError(f"An unexpected error occurred: {str(e)}")
+        return ctx
+    except ClientRequestException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        logger.warning("SharePoint sign-in failed (HTTP %s)", status or "unknown")
+        raise ValueError("SharePoint could not complete sign-in. Check the site configuration and account access.") from None
+    except Exception as exc:
+        logger.error("SharePoint connection failed (%s)", type(exc).__name__)
+        raise ValueError("The app could not connect to SharePoint. Check the site configuration and network connection.") from None
 
-def get_sharepoint_list_items(username, password, list_name, page_size=100, page_number=1, field=None, value=None):
+
+def get_sharepoint_list_items(ctx, list_name, page_size=100, page_number=1, field=None, value=None):
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
         target_list = ctx.web.lists.get_by_title(list_name)
         items_query = target_list.items
 
@@ -56,7 +59,7 @@ def get_sharepoint_list_items(username, password, list_name, page_size=100, page
             items_query = items_query.filter(f"substringof('{value}', {internal_field_name})")
 
         all_items = items_query.get_all().execute_query()
-        logger.debug(f"Retrieved items: {all_items}")
+
         total_items_count = len(all_items)
         total_pages = (total_items_count + page_size - 1) // page_size
 
@@ -87,13 +90,11 @@ def get_sharepoint_list_items(username, password, list_name, page_size=100, page
         return mapped_items, page_number < total_pages, page_number, total_pages
 
     except Exception as e:
-        logger.error(f"Error in get_sharepoint_list_items: {str(e)}", exc_info=True)
+        logger.error("SharePoint operation get_sharepoint_list_items failed (%s)", type(e).__name__)
         raise
 
-def get_sharepoint_item(username, password, list_name, item_id):
+def get_sharepoint_item(ctx, list_name, item_id):
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
         target_list = ctx.web.lists.get_by_title(list_name)
         
         item = target_list.items.get_by_id(item_id).get().execute_query()
@@ -115,16 +116,13 @@ def get_sharepoint_item(username, password, list_name, item_id):
         for internal_name, display_name in field_mappings.items():
             mapped_item[display_name] = item.properties.get(internal_name, '')
 
-        logger.debug(f"Retrieved item (ID: {item_id}): {mapped_item}")
         return mapped_item
     except Exception as e:
-        logger.error(f"Error in get_sharepoint_item: {str(e)}", exc_info=True)
+        logger.error("SharePoint operation get_sharepoint_item failed (%s)", type(e).__name__)
         raise
 
-def update_sharepoint_item(username, password, list_name, item_id, updated_properties):
+def update_sharepoint_item(ctx, list_name, item_id, updated_properties):
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
         target_list = ctx.web.lists.get_by_title(list_name)
         item = target_list.items.get_by_id(item_id)
 
@@ -160,15 +158,13 @@ def update_sharepoint_item(username, password, list_name, item_id, updated_prope
 
         item.update()
         ctx.execute_query()
-        logger.debug(f"Updated item (ID: {item_id})")
+
     except Exception as e:
-        logger.error(f"Error in update_sharepoint_item: {str(e)}", exc_info=True)
+        logger.error("SharePoint operation update_sharepoint_item failed (%s)", type(e).__name__)
         raise
 
-def add_issue_to_sharepoint(username, password, list_name, title, description, priority, user_id, item_id=None):
+def add_issue_to_sharepoint(ctx, list_name, title, description, priority, user_id, item_id=None):
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
         target_list = ctx.web.lists.get_by_title(list_name)
         
         item_properties = {
@@ -179,23 +175,18 @@ def add_issue_to_sharepoint(username, password, list_name, title, description, p
         }
     
         created_item = target_list.add_item(item_properties).execute_query()
-        
-        logger.debug(f"Created issue in Tickets list: {title}")
 
     except Exception as e:
-        logger.error(f"Error in add_issue_to_sharepoint: {str(e)}", exc_info=True)
+        logger.error("SharePoint operation add_issue_to_sharepoint failed (%s)", type(e).__name__)
         raise
 
-def get_user_id(username, password, user_email):
+def get_user_id(ctx):
     try:
-        user_credentials = UserCredential(username, password)
-        ctx = ClientContext(site_url).with_credentials(user_credentials)
         
         current_user = ctx.web.current_user.get().execute_query()
-        logger.debug(f"Current user: {current_user.properties}")
-        
+
         return current_user.id
 
     except Exception as e:
-        logger.error(f"Error in get_user_id: {str(e)}", exc_info=True)
+        logger.error("SharePoint operation get_user_id failed (%s)", type(e).__name__)
         raise

@@ -9,8 +9,7 @@ class ItemDashboardWindow(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.username = ""
-        self.password = ""
+        self.sharepoint = None
         self.item_id = ""
         self.init_ui()
 
@@ -58,9 +57,8 @@ class ItemDashboardWindow(QWidget):
 
         self.setLayout(layout)
 
-    def set_credentials(self, username, password):
-        self.username = username
-        self.password = password
+    def set_sharepoint(self, sharepoint):
+        self.sharepoint = sharepoint
 
     def search_item(self):
         search_value = self.search_input.text()
@@ -69,20 +67,20 @@ class ItemDashboardWindow(QWidget):
             return
 
         try:
-            items, _, _, _ = get_sharepoint_list_items(self.username, self.password, 'Inventory', field='S/N', value=search_value)
+            items, _, _, _ = get_sharepoint_list_items(self.sharepoint, 'Inventory', field='S/N', value=search_value)
             if not items:
-                items, _, _, _ = get_sharepoint_list_items(self.username, self.password, 'Inventory', field='Item', value=search_value)
+                items, _, _, _ = get_sharepoint_list_items(self.sharepoint, 'Inventory', field='Item', value=search_value)
             
             if items:
                 self.load_item(items[0]['ID'])
             else:
                 QMessageBox.information(self, "No results", "No items found matching your search.")
         except Exception as e:
-            QMessageBox.critical(self, 'Error', str(e))
+            QMessageBox.critical(self, 'Error', 'The inventory item could not be loaded.')
 
     def load_item(self, item_id):
         self.item_id = item_id
-        item = get_sharepoint_item(self.username, self.password, "Inventory", item_id)
+        item = get_sharepoint_item(self.sharepoint, "Inventory", item_id)
         self.populate_form(item)
 
     def populate_form(self, item):
@@ -120,10 +118,10 @@ class ItemDashboardWindow(QWidget):
                 updated_properties[key] = widget.text()
 
         try:
-            update_sharepoint_item(self.username, self.password, "Inventory", self.item_id, updated_properties)
+            update_sharepoint_item(self.sharepoint, "Inventory", self.item_id, updated_properties)
             QMessageBox.information(self, "Success", "Item updated successfully!")
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"An error occurred: {str(e)}")
+            QMessageBox.warning(self, "Error", "The inventory change could not be saved.")
             
     def report_issue(self):
         if not self.item_id:
